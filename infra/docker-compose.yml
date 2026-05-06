@@ -1,0 +1,67 @@
+services:
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: cryptoswarm_ts
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./migrations/timescale:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cryptoswarm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  backend:
+    build:
+      context: ../backend
+    env_file: ../.env
+    environment:
+      VALKEY_URL: redis://valkey:6379
+      TIMESCALE_DSN: postgresql://postgres:postgres@timescale:5432/cryptoswarm_ts
+      POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/cryptoswarm
+    ports:
+      - "8000:8000"
+    depends_on:
+      valkey:
+        condition: service_healthy
+      timescale:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  timescale_data:
+  postgres_data:
