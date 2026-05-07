@@ -109,3 +109,55 @@ class CircuitTripped(BaseMsg):
 
 class SystemHeartbeat(BaseMsg):
     process_id: int
+
+
+class AnalyzeRequest(BaseMsg):
+    symbol: str
+    interval: str = "1m"
+    lookback_bars: int = 100
+
+
+class QuantResult(BaseMsg):
+    symbol: str
+    regime: Literal["trending_up", "trending_down", "ranging", "volatile"]
+    signal_strength: float          # -1.0 (strong sell) to 1.0 (strong buy)
+    confidence: float               # 0.0 to 1.0
+    reasoning: str
+    indicators: dict                # raw indicator values
+
+
+class RiskResult(BaseMsg):
+    symbol: str
+    kelly_fraction: float           # 0.0 to 1.0 recommended account fraction
+    max_loss_usdt: float
+    reasoning: str
+
+
+class SentimentResult(BaseMsg):
+    symbol: str
+    score: float                    # -1.0 (extreme fear) to 1.0 (extreme greed)
+    source: str                     # "fear_greed_api" | "neutral_fallback"
+    summary: str
+
+
+class PortfolioResult(BaseMsg):
+    symbol: str
+    approved: bool
+    correlation_penalty: float      # 0.0–1.0 multiplier applied to position size
+    reasoning: str
+
+
+class DirectorDecision(BaseMsg):
+    symbol: str
+    action: Literal["buy", "sell", "hold"]
+    side: Literal["LONG", "SHORT"]  # LONG for buy, SHORT for sell, LONG for hold
+    confidence: float               # 0.0 to 1.0
+    size_pct: float                 # fraction of account balance (0.0 if hold)
+    sl_pct: float                   # stop-loss percentage from entry (e.g. 0.02 = 2%)
+    tp_pct: float                   # take-profit percentage from entry (e.g. 0.04 = 4%)
+    entry_price: float              # last close price used as reference
+    reasoning: str
+    quant_summary: str
+    risk_summary: str
+    sentiment_summary: str
+    portfolio_summary: str

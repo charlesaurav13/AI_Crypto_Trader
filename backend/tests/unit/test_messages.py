@@ -4,6 +4,8 @@ from cryptoswarm.bus.messages import (
     MarkPrice, FundingUpdate, OpenInterestUpdate,
     LiquidationEvent, BookTicker, RiskVeto, TradeExecuted,
     CircuitTripped,
+    AnalyzeRequest, QuantResult, RiskResult,
+    SentimentResult, PortfolioResult, DirectorDecision,
 )
 
 
@@ -83,3 +85,45 @@ def test_all_messages_have_correlation_id():
         assert hasattr(msg, "ts")
         assert hasattr(msg, "schema_version")
         assert msg.schema_version == 1
+
+
+def test_analyze_request_defaults():
+    msg = AnalyzeRequest(symbol="BTCUSDT")
+    assert msg.symbol == "BTCUSDT"
+    assert msg.interval == "1m"
+    assert msg.lookback_bars == 100
+    assert msg.correlation_id
+
+
+def test_quant_result_roundtrip():
+    msg = QuantResult(
+        symbol="BTCUSDT",
+        regime="trending_up",
+        signal_strength=0.75,
+        confidence=0.8,
+        reasoning="EMA cross bullish",
+        indicators={"rsi": 62.0},
+    )
+    restored = QuantResult.model_validate_json(msg.model_dump_json())
+    assert restored.regime == "trending_up"
+    assert restored.signal_strength == 0.75
+
+
+def test_director_decision_hold():
+    msg = DirectorDecision(
+        symbol="ETHUSDT",
+        action="hold",
+        side="LONG",
+        confidence=0.3,
+        size_pct=0.0,
+        sl_pct=0.02,
+        tp_pct=0.04,
+        entry_price=3000.0,
+        reasoning="mixed signals",
+        quant_summary="ranging",
+        risk_summary="low kelly",
+        sentiment_summary="neutral",
+        portfolio_summary="approved",
+    )
+    assert msg.action == "hold"
+    assert msg.size_pct == 0.0
