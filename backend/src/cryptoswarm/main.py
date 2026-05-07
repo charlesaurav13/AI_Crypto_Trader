@@ -15,7 +15,7 @@ from cryptoswarm.storage.postgres import PostgresWriter
 from cryptoswarm.storage.subscriber import StorageSubscriber
 from cryptoswarm.storage.decisions import DecisionWriter
 from cryptoswarm.papertrade.engine import PaperTradeEngine
-from cryptoswarm.agents.llm import LLMClient
+from cryptoswarm.agents.llm import LLMClient, make_llm_for_agent
 from cryptoswarm.agents.quant import QuantAgent
 from cryptoswarm.agents.risk_agent import RiskAgent
 from cryptoswarm.agents.sentiment import SentimentAgent
@@ -59,18 +59,16 @@ async def main() -> None:
     await decisions_writer.connect()
     logger.info("DecisionWriter connected")
 
-    llm = LLMClient(cfg)   # provider selected by cfg.llm_provider
-
     handler = FrameHandler(bus)
     feed = FeedManager(cfg, handler, rest)
     storage_sub = StorageSubscriber(bus, ts_writer, pg_writer)
     engine = PaperTradeEngine(bus, cfg)
 
-    quant_agent     = QuantAgent(bus=bus, ts=ts_writer, llm=llm)
-    risk_agent      = RiskAgent(bus=bus, llm=llm, settings=cfg)
+    quant_agent     = QuantAgent(bus=bus, ts=ts_writer, llm=make_llm_for_agent("quant", cfg))
+    risk_agent      = RiskAgent(bus=bus, llm=make_llm_for_agent("risk", cfg), settings=cfg)
     sentiment_agent = SentimentAgent(bus=bus)
-    portfolio_agent = PortfolioAgent(bus=bus, llm=llm)
-    director        = DirectorAgent(bus=bus, llm=llm, decisions=decisions_writer, settings=cfg)
+    portfolio_agent = PortfolioAgent(bus=bus, llm=make_llm_for_agent("portfolio", cfg))
+    director        = DirectorAgent(bus=bus, llm=make_llm_for_agent("director", cfg), decisions=decisions_writer, settings=cfg)
 
     # Wire API deps
     deps.set_deps(bus=bus, pg=pg_writer, ts=ts_writer, engine=engine)

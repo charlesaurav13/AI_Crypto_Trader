@@ -16,6 +16,7 @@ from cryptoswarm.agents.llm import (
     OllamaProvider,
     GeminiProvider,
     _make_provider,
+    make_llm_for_agent,
 )
 from cryptoswarm.config.settings import Settings
 
@@ -282,3 +283,56 @@ async def test_gemini_raises_when_no_function_call():
     }):
         with pytest.raises(RuntimeError, match="GeminiProvider"):
             await provider.ask("sys", "prompt", "quant_analysis", _SCHEMA)
+
+
+# ---------------------------------------------------------------------------
+# make_llm_for_agent — per-agent override
+# ---------------------------------------------------------------------------
+
+def test_make_llm_for_agent_uses_global_when_no_override():
+    """Empty override → falls back to global provider."""
+    with patch("anthropic.AsyncAnthropic"):
+        client = make_llm_for_agent("quant", _settings("anthropic"))
+    assert isinstance(client, LLMClient)
+    assert isinstance(client._provider, AnthropicProvider)
+
+
+def test_make_llm_for_agent_uses_override_provider():
+    """QUANT_LLM=openai:gpt-4o → OpenAIProvider with gpt-4o."""
+    s = _settings("anthropic", quant_llm="openai:gpt-4o")
+    with patch("openai.AsyncOpenAI"):
+        client = make_llm_for_agent("quant", s)
+    assert isinstance(client._provider, OpenAIProvider)
+    assert client._provider._model == "gpt-4o"
+
+
+def test_make_llm_for_agent_override_anthropic():
+    """DIRECTOR_LLM=anthropic:claude-3-haiku-20240307 → AnthropicProvider."""
+    s = _settings("openai", director_llm="anthropic:claude-3-haiku-20240307")
+    with patch("anthropic.AsyncAnthropic"):
+        client = make_llm_for_agent("director", s)
+    assert isinstance(client._provider, AnthropicProvider)
+    assert client._provider._model == "claude-3-haiku-20240307"
+
+
+def test_make_llm_for_agent_override_ollama():
+    """RISK_LLM=ollama:llama3.1 → OllamaProvider."""
+    s = _settings("anthropic", risk_llm="ollama:llama3.1")
+    with patch("openai.AsyncOpenAI"):
+        client = make_llm_for_agent("risk", s)
+    assert isinstance(client._provider, OllamaProvider)
+    assert client._provider._model == "llama3.1"
+
+
+def test_make_llm_for_agent_invalid_format_raises():
+    """Override without colon raises ValueError."""
+    s = _settings("anthropic", quant_llm="openai-gpt-4o")
+    with pytest.raises(ValueError, match="quant_llm must be"):
+        make_llm_for_agent("quant", s)
+
+
+def test_make_llm_for_agent_unknown_provider_raises():
+    """Override with unknown provider name raises ValueError."""
+    s = _settings("anthropic", portfolio_llm="cohere:command-r")
+    with pytest.raises(ValueError, match="Unknown provider"):
+        make_llm_for_agent("portfolio", s)

@@ -349,3 +349,62 @@ class LLMClient:
         tool_schema: dict,
     ) -> dict[str, Any]:
         return await self._provider.ask(system, prompt, tool_name, tool_schema)
+
+
+# ---------------------------------------------------------------------------
+# Per-agent factory  (used by main.py)
+# ---------------------------------------------------------------------------
+
+def _make_provider_named(provider_name: str, model: str, settings: Any) -> LLMProvider:
+    """Instantiate a specific provider by name, reusing API keys from settings."""
+    name = provider_name.strip().lower()
+    if name == "anthropic":
+        return AnthropicProvider(api_key=settings.anthropic_api_key, model=model)
+    if name == "openai":
+        return OpenAIProvider(api_key=settings.openai_api_key, model=model)
+    if name == "ollama":
+        return OllamaProvider(base_url=settings.ollama_url, model=model)
+    if name == "gemini":
+        return GeminiProvider(api_key=settings.gemini_api_key, model=model)
+    raise ValueError(
+        f"Unknown provider {name!r} in per-agent override. "
+        f"Valid choices: anthropic | openai | ollama | gemini"
+    )
+
+
+def make_llm_for_agent(agent_name: str, settings: Any) -> LLMClient:
+    """Return an LLMClient for a named agent.
+
+    If ``settings.{agent_name}_llm`` is set (format ``"provider:model"``),
+    that provider + model is used.  Otherwise falls back to the global
+    ``settings.llm_provider`` and its matching model.
+
+    Args:
+        agent_name: one of "quant", "risk", "portfolio", "director".
+        settings:   Settings instance.
+
+    Usage in main.py::
+
+        quant_agent = QuantAgent(llm=make_llm_for_agent("quant", cfg), ...)
+        director    = DirectorAgent(llm=make_llm_for_agent("director", cfg), ...)
+    """
+    override: str = getattr(settings, f"{agent_name}_llm", "").strip()
+
+    if override:
+        if ":" not in override:
+            raise ValueError(
+                f"{agent_name}_llm must be 'provider:model', got {override!r}"
+            )
+        provider_name, model = override.split(":", 1)
+        client: LLMClient = LLMClient.__new__(LLMClient)
+        client._provider = _make_provider_named(provider_name, model, settings)
+        logger.info(
+            "LLMClient[%-12s] provider=%-12s model=%s  (per-agent override)",
+            agent_name, provider_name.strip(), model.strip(),
+        )
+        return client
+
+    # No override — use global provider
+    client = LLMClient(settings)
+    logger.info("LLMClient[%-12s] → global provider=%s", agent_name, settings.llm_provider)
+    return client

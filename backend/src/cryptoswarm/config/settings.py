@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-pro"
 
+    # ------------------------------------------------------------------ #
+    # Per-agent LLM overrides  (format: "provider:model")
+    # Leave blank to inherit the global llm_provider + model above.
+    #
+    # Examples:
+    #   QUANT_LLM=openai:gpt-4o
+    #   RISK_LLM=anthropic:claude-3-haiku-20240307
+    #   PORTFOLIO_LLM=ollama:llama3.1
+    #   DIRECTOR_LLM=anthropic:claude-3-5-sonnet-20241022
+    # ------------------------------------------------------------------ #
+    quant_llm: str = ""        # Quant Agent  — technical indicators + regime
+    risk_llm: str = ""         # Risk Agent   — Kelly criterion + sizing
+    portfolio_llm: str = ""    # Portfolio Agent — correlation / concentration
+    director_llm: str = ""     # Director Agent — final synthesis (use best model)
+
     # Director / agent timing
     director_interval_s: int = 60    # how often Director cycles all symbols
     agent_timeout_s: int = 30        # max wait for sub-agent responses
