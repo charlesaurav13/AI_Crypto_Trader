@@ -40,6 +40,10 @@ class DailyLossBreaker:
     def is_tripped(self) -> bool:
         return self._state.is_tripped()
 
+    @property
+    def last_value(self) -> float:
+        return self._state.last_value
+
     def reset(self) -> None:
         self._cumulative_pnl = 0.0
         self._state.reset()
