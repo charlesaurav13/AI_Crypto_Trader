@@ -13,7 +13,13 @@ class BusClient:
         self._client: valkey_aio.Valkey | None = None
 
     async def connect(self) -> None:
-        self._client = await valkey_aio.from_url(self._url, decode_responses=True)
+        self._client = await valkey_aio.from_url(
+            self._url,
+            decode_responses=True,
+            socket_timeout=None,          # pubsub must block forever waiting for messages
+            socket_connect_timeout=10,
+            health_check_interval=30,     # keep-alive ping every 30s
+        )
 
     async def close(self) -> None:
         if self._client:

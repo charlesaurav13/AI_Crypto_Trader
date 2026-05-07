@@ -13,7 +13,7 @@ from cryptoswarm.storage.timescale import TimescaleWriter
 
 TS_DSN = "postgresql://postgres:postgres@localhost:5432/cryptoswarm_ts"
 PG_DSN = "postgresql://postgres:postgres@localhost:5433/cryptoswarm"
-VALKEY_URL = "redis://localhost:6379"
+VALKEY_URL = "redis://localhost:6379/1"   # DB 1 = test isolation from live backend on DB 0
 
 
 def _infra_available() -> bool:

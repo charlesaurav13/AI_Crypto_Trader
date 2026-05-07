@@ -68,7 +68,9 @@ class FeedManager:
                 len(streams), len(self._cfg.symbol_list),
             )
             async with bm.futures_multiplex_socket(streams) as ws:
-                async for msg in ws:
-                    await self._handler.handle(msg)
+                while True:
+                    msg = await ws.recv()
+                    if msg:
+                        await self._handler.handle(msg)
         finally:
             await client.close_connection()

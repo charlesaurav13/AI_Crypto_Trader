@@ -38,13 +38,16 @@ def require_valkey(valkey_available):
 # ---------------------------------------------------------------------------
 
 async def test_publish_subscribe_roundtrip():
-    client = BusClient("redis://localhost:6379")
+    import uuid
+    # Use a unique channel per run to avoid collisions with integration tests on DB 1
+    channel = f"test.btctick.{uuid.uuid4()}"
+    client = BusClient("redis://localhost:6379/1")
     await client.connect()
 
     received: list[tuple[str, str]] = []
 
     async def collector():
-        async for topic, data in client.subscribe("market.tick.BTCUSDT.1m"):
+        async for topic, data in client.subscribe(channel):
             received.append((topic, data))
             break  # stop after first message
 
@@ -55,12 +58,12 @@ async def test_publish_subscribe_roundtrip():
         symbol="BTCUSDT", interval="1m",
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, is_closed=True,
     )
-    await client.publish("market.tick.BTCUSDT.1m", msg)
+    await client.publish(channel, msg)
     await asyncio.wait_for(task, timeout=3.0)
 
     assert len(received) == 1
     topic, data = received[0]
-    assert topic == "market.tick.BTCUSDT.1m"
+    assert topic == channel
     restored = MarketTick.model_validate_json(data)
     assert restored.symbol == "BTCUSDT"
     assert restored.correlation_id == msg.correlation_id
@@ -69,12 +72,13 @@ async def test_publish_subscribe_roundtrip():
 
 
 async def test_pattern_subscribe():
-    client = BusClient("redis://localhost:6379")
+    # Use DB 1 to avoid colliding with the live backend running on DB 0
+    client = BusClient("redis://localhost:6379/1")
     await client.connect()
     received = []
 
     async def collector():
-        async for topic, data in client.psubscribe("market.tick.*"):
+        async for topic, data in client.psubscribe("test.tick.*"):
             received.append(topic)
             break
 
@@ -85,8 +89,8 @@ async def test_pattern_subscribe():
         symbol="ETHUSDT", interval="1m",
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, is_closed=False,
     )
-    await client.publish("market.tick.ETHUSDT.1m", msg)
+    await client.publish("test.tick.ETHUSDT.1m", msg)
     await asyncio.wait_for(task, timeout=3.0)
-    assert "market.tick.ETHUSDT.1m" in received
+    assert "test.tick.ETHUSDT.1m" in received
 
     await client.close()
