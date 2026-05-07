@@ -72,3 +72,29 @@ class TimescaleWriter:
             """,
             symbol, ts, best_bid, best_ask,
         )
+
+    async def fetch_klines(self, symbol: str, limit: int = 100) -> list[dict]:
+        """Return the most recent `limit` 1m candles for symbol, chronological order."""
+        assert self._pool, "TimescaleWriter not connected"
+        rows = await self._pool.fetch(
+            """
+            SELECT ts, open, high, low, close, volume
+            FROM klines_1m
+            WHERE symbol = $1
+            ORDER BY ts DESC
+            LIMIT $2
+            """,
+            symbol,
+            limit,
+        )
+        # rows arrive newest-first; reverse to oldest-first for indicators
+        return [
+            {
+                "open":   float(r["open"]),
+                "high":   float(r["high"]),
+                "low":    float(r["low"]),
+                "close":  float(r["close"]),
+                "volume": float(r["volume"]),
+            }
+            for r in reversed(rows)
+        ]
