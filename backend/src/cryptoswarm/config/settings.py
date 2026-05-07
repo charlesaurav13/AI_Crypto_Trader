@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,10 +41,29 @@ class Settings(BaseSettings):
     risk: RiskConfig = RiskConfig()
     fees: FeeConfig = FeeConfig()
 
-    # Agent / LLM configuration
+    # ------------------------------------------------------------------ #
+    # LLM provider selection
+    # Set LLM_PROVIDER to one of: anthropic | openai | ollama | gemini
+    # ------------------------------------------------------------------ #
+    llm_provider: Literal["anthropic", "openai", "ollama", "gemini"] = "anthropic"
+
+    # Anthropic (Claude)
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-sonnet-20241022"
+
+    # OpenAI (GPT-4o, GPT-4-turbo, GPT-3.5-turbo, …)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
+    # Ollama  (local; requires `ollama serve` + model pulled)
     ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.1"   # must support function calling
+
+    # Google Gemini
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-1.5-pro"
+
+    # Director / agent timing
     director_interval_s: int = 60    # how often Director cycles all symbols
     agent_timeout_s: int = 30        # max wait for sub-agent responses
 

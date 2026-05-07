@@ -59,7 +59,7 @@ async def main() -> None:
     await decisions_writer.connect()
     logger.info("DecisionWriter connected")
 
-    llm = LLMClient(api_key=cfg.anthropic_api_key, model=cfg.anthropic_model)
+    llm = LLMClient(cfg)   # provider selected by cfg.llm_provider
 
     handler = FrameHandler(bus)
     feed = FeedManager(cfg, handler, rest)
