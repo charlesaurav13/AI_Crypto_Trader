@@ -13,7 +13,14 @@ from cryptoswarm.feed.ws_client import FeedManager
 from cryptoswarm.storage.timescale import TimescaleWriter
 from cryptoswarm.storage.postgres import PostgresWriter
 from cryptoswarm.storage.subscriber import StorageSubscriber
+from cryptoswarm.storage.decisions import DecisionWriter
 from cryptoswarm.papertrade.engine import PaperTradeEngine
+from cryptoswarm.agents.llm import LLMClient
+from cryptoswarm.agents.quant import QuantAgent
+from cryptoswarm.agents.risk_agent import RiskAgent
+from cryptoswarm.agents.sentiment import SentimentAgent
+from cryptoswarm.agents.portfolio import PortfolioAgent
+from cryptoswarm.agents.director import DirectorAgent
 from cryptoswarm.api.app import create_app
 from cryptoswarm.api import deps
 
@@ -48,10 +55,22 @@ async def main() -> None:
     rest = BinanceRestClient(cfg.binance_api_key, cfg.binance_api_secret, cfg.binance_testnet)
     await rest.connect()
 
+    decisions_writer = DecisionWriter(cfg.postgres_dsn)
+    await decisions_writer.connect()
+    logger.info("DecisionWriter connected")
+
+    llm = LLMClient(api_key=cfg.anthropic_api_key, model=cfg.anthropic_model)
+
     handler = FrameHandler(bus)
     feed = FeedManager(cfg, handler, rest)
     storage_sub = StorageSubscriber(bus, ts_writer, pg_writer)
     engine = PaperTradeEngine(bus, cfg)
+
+    quant_agent     = QuantAgent(bus=bus, ts=ts_writer, llm=llm)
+    risk_agent      = RiskAgent(bus=bus, llm=llm, settings=cfg)
+    sentiment_agent = SentimentAgent(bus=bus)
+    portfolio_agent = PortfolioAgent(bus=bus, llm=llm)
+    director        = DirectorAgent(bus=bus, llm=llm, decisions=decisions_writer, settings=cfg)
 
     # Wire API deps
     deps.set_deps(bus=bus, pg=pg_writer, ts=ts_writer, engine=engine)
@@ -64,6 +83,11 @@ async def main() -> None:
         asyncio.create_task(feed.run(), name="feed"),
         asyncio.create_task(storage_sub.run(), name="storage"),
         asyncio.create_task(engine.run(), name="engine"),
+        asyncio.create_task(quant_agent.run(), name="quant_agent"),
+        asyncio.create_task(risk_agent.run(), name="risk_agent"),
+        asyncio.create_task(sentiment_agent.run(), name="sentiment_agent"),
+        asyncio.create_task(portfolio_agent.run(), name="portfolio_agent"),
+        asyncio.create_task(director.run(), name="director"),
         asyncio.create_task(
             heartbeat_loop(bus, cfg.risk.heartbeat_interval_s), name="heartbeat"
         ),
@@ -84,6 +108,7 @@ async def main() -> None:
         await bus.close()
         await ts_writer.close()
         await pg_writer.close()
+        await decisions_writer.close()
         await rest.close()
         logger.info("Shutdown complete")
 
