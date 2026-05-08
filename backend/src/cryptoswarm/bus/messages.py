@@ -161,3 +161,21 @@ class DirectorDecision(BaseMsg):
     risk_summary: str
     sentiment_summary: str
     portfolio_summary: str
+
+
+class NewsSentimentResult(BaseMsg):
+    symbol: str
+    score: float                  # -1.0 to 1.0 weighted avg
+    article_count: int
+    top_headline: str
+    source_breakdown: dict        # {"coindesk": 3, "reddit": 7, ...}
+
+
+class MLSignal(BaseMsg):
+    symbol: str
+    regime_pred: Literal["trending_up", "trending_down", "ranging", "volatile"]
+    direction_pred: Literal["up", "down"]       # XGBoost 1h prediction
+    short_direction: Literal["up", "down"]      # LSTM 15m prediction
+    size_adjustment: Literal["hold", "scale_up", "scale_down"]
+    confidence: float                           # 0.0–1.0
+    reasoning: str
