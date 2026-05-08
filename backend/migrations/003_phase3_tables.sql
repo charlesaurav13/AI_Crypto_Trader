@@ -60,3 +60,12 @@ CREATE TABLE IF NOT EXISTS training_runs (
 
 -- Add id column to rl_tuples if missing
 ALTER TABLE rl_tuples ADD COLUMN IF NOT EXISTS id BIGSERIAL;
+
+-- Idempotent column additions for pre-existing news_sentiment table
+-- (Phase 1 created news_sentiment with fewer columns — add missing ones)
+ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS symbol       TEXT    NOT NULL DEFAULT '';
+ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS model        TEXT    NOT NULL DEFAULT 'unknown';
+ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS relevance    FLOAT   NOT NULL DEFAULT 0.0;
+ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS score        FLOAT   NOT NULL DEFAULT 0.0;
+ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS summary      TEXT;
+CREATE INDEX IF NOT EXISTS idx_news_sentiment_symbol_ts ON news_sentiment(symbol, ts DESC);
