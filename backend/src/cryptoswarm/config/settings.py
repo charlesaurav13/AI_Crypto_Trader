@@ -78,6 +78,35 @@ class Settings(BaseSettings):
     portfolio_llm: str = ""    # Portfolio Agent — correlation / concentration
     director_llm: str = ""     # Director Agent — final synthesis (use best model)
 
+    # ------------------------------------------------------------------ #
+    # Scraper settings
+    # ------------------------------------------------------------------ #
+    scraper_interval_s: int = 1800          # 30 minutes
+    scraper_ollama_model: str = "qwen2.5:7b"
+    scraper_ollama_url: str = "http://localhost:11434"
+    scraper_min_relevance: float = 0.3
+
+    # ------------------------------------------------------------------ #
+    # ML / RL settings
+    # ------------------------------------------------------------------ #
+    ml_retrain_interval_s: int = 21600      # 6 hours
+    ml_min_samples: int = 500
+    ml_model_dir: str = "models"
+    ml_feature_lookback: int = 30
+
+    # Composite reward weights
+    reward_w1: float = 0.40
+    reward_w2: float = 0.20
+    reward_w3: float = 0.20
+    reward_w4: float = 0.15
+    reward_w5: float = 0.05
+
+    # ------------------------------------------------------------------ #
+    # Prompt evolution settings
+    # ------------------------------------------------------------------ #
+    prompt_evolution_interval_s: int = 25200   # 7 hours
+    prompt_evolution_lookback: int = 50
+
     # Director / agent timing
     director_interval_s: int = 60    # how often Director cycles all symbols
     agent_timeout_s: int = 30        # max wait for sub-agent responses
