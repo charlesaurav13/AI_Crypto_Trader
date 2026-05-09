@@ -39,7 +39,7 @@ class OllamaScorer:
     def __init__(self, ollama_url: str, model: str, symbols: list[str]) -> None:
         self._url = f"{ollama_url.rstrip('/')}/api/generate"
         self._model = model
-        self._symbols = symbols
+        self._symbols = list(symbols)
 
     async def score(self, title: str, body: str) -> list[ScoredArticle]:
         """Score an article for all symbols. Returns neutral on any error."""
@@ -76,5 +76,5 @@ class OllamaScorer:
             text = resp.json()["response"].strip()
             # Extract JSON block if wrapped in markdown
             if "```" in text:
-                text = text.split("```")[1].lstrip("json").strip()
+                text = text.split("```")[1].removeprefix("json").strip()
             return json.loads(text)

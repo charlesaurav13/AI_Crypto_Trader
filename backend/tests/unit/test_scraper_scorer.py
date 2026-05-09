@@ -1,6 +1,6 @@
 """Tests for OllamaScorer — all HTTP calls mocked."""
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock, Mock
 
 from cryptoswarm.scraper.scorer import OllamaScorer, ScoredArticle
 
@@ -52,3 +52,21 @@ async def test_score_returns_neutral_on_ollama_error():
     # Should return neutral scores rather than raise
     assert all(r.relevance == 0.0 for r in results)
     assert all(r.sentiment == 0.0 for r in results)
+
+
+async def test_call_ollama_handles_markdown_wrapped_json():
+    """_call_ollama strips ```json ... ``` wrapper before parsing."""
+    scorer = _make_scorer()
+    json_payload = '{"BTCUSDT": {"relevance": 0.8, "sentiment": 0.5, "summary": "BTC up"}}'
+    markdown_response = f"```json\n{json_payload}\n```"
+    mock_resp = Mock()
+    mock_resp.json.return_value = {"response": markdown_response}
+    mock_resp.raise_for_status = Mock()
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_resp)
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        result = await scorer._call_ollama("BTC up", "body text")
+    assert result["BTCUSDT"]["relevance"] == 0.8
+    assert result["BTCUSDT"]["sentiment"] == 0.5
