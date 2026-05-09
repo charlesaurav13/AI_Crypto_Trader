@@ -18,6 +18,7 @@ class RewardConfig:
     w3: float = 0.20   # R:R ratio
     w4: float = 0.15   # drawdown penalty
     w5: float = 0.05   # time-in-loss penalty
+    drawdown_scale: float = 3.0  # amplifier for drawdown penalty component
 
 
 def compute_reward(
@@ -29,7 +30,7 @@ def compute_reward(
     total_seconds: float,
     cfg: RewardConfig | None = None,
 ) -> float:
-    """Compute composite reward. Returned value is in [-5.0, +5.0]."""
+    """Compute composite reward. Returned value is clamped to [-5.0, +5.0]; typical positive range is [0.0, +0.80]."""
     if cfg is None:
         cfg = RewardConfig()
 
@@ -39,8 +40,13 @@ def compute_reward(
     # Component 1: normalised P&L (-1 to +1 typical)
     norm_pnl = max(-1.0, min(1.0, realized_pnl / ps))
 
-    # Component 2: win/loss (+1 profitable, -0.5 loss)
-    win_contribution = 1.0 if realized_pnl > 0 else -0.5
+    # Component 2: win/loss (+1 profitable, 0.0 break-even, -0.5 loss)
+    if realized_pnl > 0:
+        win_contribution = 1.0
+    elif realized_pnl == 0.0:
+        win_contribution = 0.0
+    else:
+        win_contribution = -0.5
 
     # Component 3: R:R ratio (0–1 normalised, capped at 5x)
     rr = abs(tp_pct) / max(abs(sl_pct), 1e-6)
@@ -48,10 +54,10 @@ def compute_reward(
 
     # Component 4: drawdown penalty (extra weight on losses)
     drawdown = max(0.0, -realized_pnl / ps)
-    drawdown_penalty = drawdown * 3.0
+    drawdown_penalty = drawdown * cfg.drawdown_scale
 
     # Component 5: fraction of time in negative P&L
-    time_in_loss = seconds_in_loss / ts
+    time_in_loss = min(seconds_in_loss / ts, 1.0)
 
     reward = (
         cfg.w1 * norm_pnl
