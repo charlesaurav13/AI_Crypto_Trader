@@ -157,18 +157,23 @@ class PostgresWriter:
         self, agent_name: str, system_prompt: str, perf_score: float | None = None
     ) -> None:
         assert self._pool
-        await self._pool.execute(
-            """
-            UPDATE agent_prompts SET active=false WHERE agent_name=$1;
-            INSERT INTO agent_prompts (agent_name, version, system_prompt, perf_score, active)
-            VALUES (
-                $1,
-                COALESCE((SELECT MAX(version) FROM agent_prompts WHERE agent_name=$1), 0) + 1,
-                $2, $3, true
-            )
-            """,
-            agent_name, system_prompt, perf_score,
-        )
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "UPDATE agent_prompts SET active=false WHERE agent_name=$1",
+                    agent_name,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO agent_prompts (agent_name, version, system_prompt, perf_score, active)
+                    VALUES (
+                        $1,
+                        COALESCE((SELECT MAX(version) FROM agent_prompts WHERE agent_name=$1), 0) + 1,
+                        $2, $3, true
+                    )
+                    """,
+                    agent_name, system_prompt, perf_score,
+                )
 
     # ------------------------------------------------------------------
     # RL tuple reward update

@@ -49,10 +49,20 @@ async def test_get_news_sentiment_for_symbol_returns_list():
 
 async def test_save_agent_prompt_inserts():
     w = _make_writer()
+    # transaction() is a sync call returning an async CM; acquire() returns an async CM
+    txn_cm = AsyncMock()
+    txn_cm.__aenter__ = AsyncMock(return_value=None)
+    txn_cm.__aexit__ = AsyncMock(return_value=False)
+    mock_conn = AsyncMock()
+    mock_conn.transaction = MagicMock(return_value=txn_cm)
+    acquire_cm = AsyncMock()
+    acquire_cm.__aenter__ = AsyncMock(return_value=mock_conn)
+    acquire_cm.__aexit__ = AsyncMock(return_value=False)
+    w._pool.acquire = MagicMock(return_value=acquire_cm)
     await w.save_agent_prompt(
         agent_name="quant", system_prompt="You are a quant...", perf_score=0.42
     )
-    w._pool.execute.assert_called_once()
+    assert mock_conn.execute.await_count == 2
 
 
 async def test_get_agent_prompt_returns_none_when_missing():
