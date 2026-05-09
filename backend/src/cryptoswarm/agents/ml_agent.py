@@ -59,7 +59,7 @@ class MLAgent:
             size_adj, ppo_conf = self._ppo.predict(feat_vec)
         except Exception as exc:
             logger.warning("MLAgent: model inference failed for %s: %s", req.symbol, exc)
-            await self._publish_neutral(req)
+            await self._publish_neutral(req, reason=f"model inference failed — neutral fallback")
             return
 
         # Overall confidence: average of models that have been trained (conf > 0)
@@ -99,7 +99,7 @@ class MLAgent:
             req.symbol, regime, direction, short_dir, size_adj, confidence,
         )
 
-    async def _publish_neutral(self, req: AnalyzeRequest) -> None:
+    async def _publish_neutral(self, req: AnalyzeRequest, reason: str = "feature build failed — neutral fallback") -> None:
         msg = MLSignal(
             symbol=req.symbol,
             correlation_id=req.correlation_id,
@@ -108,7 +108,7 @@ class MLAgent:
             short_direction="up",
             size_adjustment="hold",
             confidence=0.0,
-            reasoning="feature build failed — neutral fallback",
+            reasoning=reason,
         )
         await self._bus.publish(f"agent.result.ml.{req.symbol}", msg)
         try:
