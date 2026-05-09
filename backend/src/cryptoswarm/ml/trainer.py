@@ -35,24 +35,24 @@ class MLTrainer:
         min_samples: int = 500,
         seq_len: int = 30,
     ) -> None:
-        self._ts = ts
+        self._ts = ts          # reserved for future feature freshness checks
         self._pg = pg
         self._xgb = xgb_model
         self._lstm = lstm_model
         self._store = model_store
-        self._features = features
+        self._features = features  # reserved for on-demand feature computation
         self._interval = interval_s
         self._min_samples = min_samples
         self._seq_len = seq_len
 
     async def run(self) -> None:
-        """Run forever: retrain every interval_s."""
+        """Run forever: retrain on startup then every interval_s."""
         while True:
-            await asyncio.sleep(self._interval)
             try:
                 await self.run_once()
             except Exception as exc:
                 logger.error("MLTrainer.run error: %s", exc)
+            await asyncio.sleep(self._interval)
 
     async def run_once(self) -> None:
         """Single training cycle. Called directly in tests."""
@@ -83,6 +83,7 @@ class MLTrainer:
                 logger.info("MLTrainer: XGBoost trained on %d samples", len(X_flat))
             except Exception as exc:
                 logger.warning("MLTrainer: XGBoost training failed: %s", exc)
+                metrics["xgb_error"] = str(exc)
 
         # Train LSTM
         if len(X_seq) >= self._min_samples:
@@ -94,6 +95,7 @@ class MLTrainer:
                 logger.info("MLTrainer: LSTM trained on %d sequences", len(X_seq))
             except Exception as exc:
                 logger.warning("MLTrainer: LSTM training failed: %s", exc)
+                metrics["lstm_error"] = str(exc)
 
         await self._pg.update_training_run(
             run_id=run_id,
@@ -105,9 +107,17 @@ class MLTrainer:
     def _build_training_data(
         self, trades: list
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Parse trades into feature arrays and labels."""
+        """Parse closed trades into feature arrays and labels.
+
+        NOTE: Regime labels are *proxied* from trade P&L magnitude and are a
+        placeholder until a dedicated market-regime classifier is available.
+        A profitable trade ≠ trending market; this approximation may produce
+        noisy regime labels. Direction labels (profitable=1, loss=0) are also
+        P&L-based and share the same limitation.
+        """
         X_flat, y_regime, y_dir = [], [], []
 
+        skipped = 0
         for t in trades:
             try:
                 state = json.loads(t["state"]) if isinstance(t["state"], str) else dict(t["state"])
@@ -130,8 +140,12 @@ class MLTrainer:
                 X_flat.append(features)
                 y_regime.append(regime)
                 y_dir.append(direction)
-            except Exception:
-                continue
+            except Exception as exc:
+                skipped += 1
+                logger.debug("MLTrainer: skipping trade %s — %s", t.get("correlation_id"), exc)
+
+        if skipped:
+            logger.warning("MLTrainer: skipped %d/%d malformed trade rows", skipped, len(trades))
 
         if not X_flat:
             empty = np.empty((0, FEATURE_SIZE), dtype=np.float32)

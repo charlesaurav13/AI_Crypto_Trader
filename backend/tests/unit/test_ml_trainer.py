@@ -79,3 +79,40 @@ async def test_run_once_records_training_run():
     await trainer.run_once()
     trainer._pg.insert_training_run.assert_called()
     trainer._pg.update_training_run.assert_called()
+
+
+async def test_run_once_tolerates_malformed_state_rows():
+    """Malformed JSON in state column should be skipped, not crash training."""
+    trainer = _make_trainer()
+    bad_trades = [
+        {"correlation_id": "bad", "symbol": "BTCUSDT", "side": "LONG",
+         "realized_pnl": 1.0, "state": "not-valid-json",
+         "action": "{}", "reward": 0.5},
+    ]
+    # Mix of bad rows + enough good rows to hit min_samples=5
+    good_trades = [
+        {"correlation_id": f"g{i}", "symbol": "BTCUSDT", "side": "LONG",
+         "realized_pnl": 1.0, "state": f'{{"f0": {float(i)/10}}}',
+         "action": "{}", "reward": 0.5}
+        for i in range(8)
+    ]
+    trainer._pg.get_recent_closed_trades = AsyncMock(return_value=bad_trades + good_trades)
+    await trainer.run_once()  # must not raise
+    # Good rows were enough to train
+    trainer._xgb.fit.assert_called_once()
+
+
+async def test_run_once_records_error_when_fit_raises():
+    """If model.fit() raises, the error is recorded in metrics passed to update_training_run."""
+    trainer = _make_trainer()
+    trainer._xgb.fit = MagicMock(side_effect=RuntimeError("GPU OOM"))
+    good_trades = [
+        {"correlation_id": f"g{i}", "symbol": "BTCUSDT", "side": "LONG",
+         "realized_pnl": 1.0, "state": f'{{"f0": {float(i)/10}}}',
+         "action": "{}", "reward": 0.5}
+        for i in range(8)
+    ]
+    trainer._pg.get_recent_closed_trades = AsyncMock(return_value=good_trades)
+    await trainer.run_once()  # must not raise
+    call_kwargs = trainer._pg.update_training_run.call_args[1]
+    assert "xgb_error" in call_kwargs["metrics"]
