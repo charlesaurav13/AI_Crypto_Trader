@@ -2,11 +2,16 @@
 updates rl_tuples, and triggers PPO online update."""
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
+
+import numpy as np
 
 from cryptoswarm.bus.client import BusClient
 from cryptoswarm.bus.messages import PositionUpdate
+from cryptoswarm.ml.features import FEATURE_SIZE
 from cryptoswarm.ml.reward import RewardConfig, compute_reward
 
 if TYPE_CHECKING:
@@ -31,8 +36,8 @@ class RewardComputer:
         self._ppo = ppo
         self._features = features
         self._cfg = reward_config or RewardConfig()
-        # Track per-correlation entry state for reward computation
-        self._entry_info: dict[str, dict] = {}  # cid → {entry_price, entry_state, sl_pct, tp_pct, side, open_ts}
+        # Track per-symbol entry state for reward computation
+        self._entry_info: dict[str, dict] = {}  # symbol → {entry_price, entry_state, sl_pct, tp_pct, side, open_ts}
 
     async def run(self) -> None:
         async for _, data in self._bus.subscribe("position.update"):
@@ -42,7 +47,7 @@ class RewardComputer:
 
     async def register_open(
         self,
-        correlation_id: str,
+        symbol: str,
         entry_price: float,
         sl_pct: float,
         tp_pct: float,
@@ -50,8 +55,8 @@ class RewardComputer:
         entry_state: dict,
         open_ts: float,
     ) -> None:
-        """Called by main.py (or engine hook) when a trade opens."""
-        self._entry_info[correlation_id] = {
+        """Called by main.py when a trade opens. Keyed by symbol."""
+        self._entry_info[symbol] = {
             "entry_price": entry_price,
             "entry_state": entry_state,
             "sl_pct": sl_pct,
@@ -61,9 +66,7 @@ class RewardComputer:
         }
 
     async def _handle_close(self, update: PositionUpdate) -> None:
-        import time
-        cid = update.correlation_id
-        info = self._entry_info.pop(cid, None)
+        info = self._entry_info.pop(update.symbol, None)
 
         # Compute P&L from mark price vs entry
         entry = info["entry_price"] if info else update.entry_price
@@ -96,7 +99,7 @@ class RewardComputer:
 
         # Update rl_tuple in DB
         await self._pg.update_rl_tuple_reward(
-            correlation_id=cid,
+            correlation_id=update.correlation_id,
             reward=reward,
             next_state=next_state_dict,
         )
@@ -104,8 +107,7 @@ class RewardComputer:
         # PPO online update
         if info and "entry_state" in info:
             prev_state_dict = info["entry_state"]
-            prev_state = [float(prev_state_dict.get(f"f{i}", 0.0)) for i in range(25)]
-            import numpy as np
+            prev_state = [float(prev_state_dict.get(f"f{i}", 0.0)) for i in range(FEATURE_SIZE)]
             self._ppo.update(
                 state=np.array(prev_state, dtype=np.float32),
                 action="scale_up",   # approximate — Director chose to trade
@@ -113,7 +115,7 @@ class RewardComputer:
                 next_state=next_state,
                 done=True,
             )
-            self._ppo.maybe_train()
+            await asyncio.to_thread(self._ppo.maybe_train)
 
         logger.info(
             "RewardComputer: %s %s pnl=%.4f reward=%.4f",

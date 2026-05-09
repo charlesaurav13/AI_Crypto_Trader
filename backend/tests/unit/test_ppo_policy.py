@@ -50,7 +50,7 @@ def test_predict_after_training_returns_valid_action():
             done=True,
         )
     policy.maybe_train()
-    if policy.is_trained:
-        action, conf = policy.predict(_state())
-        assert action in ["hold", "scale_up", "scale_down"]
-        assert 0.0 <= conf <= 1.0
+    assert policy.is_trained, "PPO should be trained after sufficient experience"
+    action, conf = policy.predict(_state())
+    assert action in ["hold", "scale_up", "scale_down"]
+    assert 0.0 <= conf <= 1.0

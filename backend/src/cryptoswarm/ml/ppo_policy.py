@@ -11,6 +11,7 @@ maybe_train() is called after each trade close.
 from __future__ import annotations
 
 import logging
+from collections import deque
 from typing import Literal
 
 import numpy as np
@@ -26,6 +27,7 @@ class PPOPolicy:
         self,
         state_size: int,
         min_train_samples: int = 256,
+        max_buffer_size: int = 10_000,
     ) -> None:
         self._state_size = state_size
         self._min_train = min_train_samples
@@ -33,8 +35,8 @@ class PPOPolicy:
         self._env = None
         self.is_trained: bool = False
         self.experience_count: int = 0
-        # Buffer: list of (state, action_idx, reward, next_state, done)
-        self._buffer: list[tuple] = []
+        # Buffer: deque of (state, action_idx, reward, next_state, done)
+        self._buffer: deque = deque(maxlen=max_buffer_size)
 
     def predict(
         self, state: np.ndarray
@@ -67,7 +69,7 @@ class PPOPolicy:
         try:
             self._train()
         except Exception as exc:
-            logger.warning("PPOPolicy.maybe_train error: %s", exc)
+            logger.warning("PPOPolicy.maybe_train error: %s", exc, exc_info=True)
 
     def _train(self) -> None:
         import gymnasium as gym
@@ -97,12 +99,13 @@ class PPOPolicy:
                 done = exp[4] or self_._idx >= len(self_._buffer)
                 return obs, reward, done, False, {}
 
-        buffer_copy = list(self._buffer[-self._min_train:])
-        env = _ReplayEnv(buffer_copy, self._state_size)
+        buffer_copy = list(self._buffer)[-self._min_train:]
+        make_env = lambda: _ReplayEnv(buffer_copy, self._state_size)
+        vec_env = make_vec_env(make_env)
         if self._model is None:
-            self._model = PPO("MlpPolicy", env, verbose=0, n_steps=64, batch_size=32)
+            self._model = PPO("MlpPolicy", vec_env, verbose=0, n_steps=64, batch_size=32)
         else:
-            self._model.set_env(make_vec_env(lambda: _ReplayEnv(buffer_copy, self._state_size)))
+            self._model.set_env(vec_env)
         self._model.learn(total_timesteps=len(buffer_copy) * 2, reset_num_timesteps=False)
         self.is_trained = True
         logger.info("PPOPolicy: trained on %d experiences", len(buffer_copy))
