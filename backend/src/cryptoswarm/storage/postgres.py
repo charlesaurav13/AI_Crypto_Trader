@@ -123,7 +123,7 @@ class PostgresWriter:
 
     async def get_news_sentiment_for_symbol(
         self, symbol: str, hours: int = 6
-    ) -> list:
+    ) -> list[asyncpg.Record]:
         assert self._pool
         return await self._pool.fetch(
             """
@@ -159,6 +159,10 @@ class PostgresWriter:
         assert self._pool
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                # Advisory lock prevents first-insert race on UNIQUE(agent_name, version)
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext($1))", agent_name
+                )
                 await conn.execute(
                     "UPDATE agent_prompts SET active=false WHERE agent_name=$1",
                     agent_name,
@@ -223,7 +227,7 @@ class PostgresWriter:
     # ------------------------------------------------------------------
 
     async def insert_training_run(
-        self, model_type: str, started_at: "datetime"
+        self, model_type: str, started_at: datetime
     ) -> int:
         assert self._pool
         return await self._pool.fetchval(
@@ -237,7 +241,7 @@ class PostgresWriter:
     async def update_training_run(
         self,
         run_id: int,
-        completed_at: "datetime",
+        completed_at: datetime,
         sample_count: int,
         metrics: dict,
     ) -> None:
@@ -251,7 +255,7 @@ class PostgresWriter:
             run_id, completed_at, sample_count, json.dumps(metrics),
         )
 
-    async def get_recent_closed_trades(self, limit: int = 50) -> list:
+    async def get_recent_closed_trades(self, limit: int = 50) -> list[asyncpg.Record]:
         """Fetch recent closed trades with their rl_tuple rewards for prompt evolution."""
         assert self._pool
         return await self._pool.fetch(

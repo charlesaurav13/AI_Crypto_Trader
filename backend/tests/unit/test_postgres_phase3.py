@@ -62,7 +62,12 @@ async def test_save_agent_prompt_inserts():
     await w.save_agent_prompt(
         agent_name="quant", system_prompt="You are a quant...", perf_score=0.42
     )
-    assert mock_conn.execute.await_count == 2
+    # advisory lock + UPDATE + INSERT = 3 execute calls, in that order
+    assert mock_conn.execute.await_count == 3
+    calls = mock_conn.execute.call_args_list
+    assert "pg_advisory_xact_lock" in calls[0].args[0]
+    assert "UPDATE agent_prompts SET active=false" in calls[1].args[0]
+    assert "INSERT INTO agent_prompts" in calls[2].args[0]
 
 
 async def test_get_agent_prompt_returns_none_when_missing():
@@ -74,12 +79,18 @@ async def test_get_agent_prompt_returns_none_when_missing():
 
 async def test_update_rl_tuple_reward_calls_execute():
     w = _make_writer()
+    next_st = {"rsi": 62.0}
     await w.update_rl_tuple_reward(
         correlation_id="cid-123",
         reward=0.85,
-        next_state={"rsi": 62.0},
+        next_state=next_st,
     )
+    # Verify args: correlation_id, reward, json.dumps(next_state)
     w._pool.execute.assert_called_once()
+    _, *args = w._pool.execute.call_args.args
+    assert args[0] == "cid-123"
+    assert args[1] == 0.85
+    assert args[2] == json.dumps(next_st)
 
 
 async def test_insert_ml_signal_calls_execute():
@@ -90,6 +101,15 @@ async def test_insert_ml_signal_calls_execute():
         size_adjustment="scale_up", model_version="2026-05-08T06:00:00",
     )
     w._pool.execute.assert_called_once()
+    # Verify argument order: symbol first, model_version last
+    _, *args = w._pool.execute.call_args.args
+    assert args[0] == "BTCUSDT"
+    assert args[1] == "trending_up"
+    assert args[2] == "up"
+    assert args[3] == "up"
+    assert args[4] == 0.8
+    assert args[5] == "scale_up"
+    assert args[6] == "2026-05-08T06:00:00"
 
 
 async def test_insert_training_run_returns_id():

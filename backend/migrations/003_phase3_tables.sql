@@ -70,3 +70,8 @@ ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS model        TEXT    NOT NUL
 ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS relevance    FLOAT   NOT NULL DEFAULT 0.0;
 ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS score        FLOAT   NOT NULL DEFAULT 0.0;
 ALTER TABLE news_sentiment ADD COLUMN IF NOT EXISTS summary      TEXT;
+
+-- Expression index so update_rl_tuple_reward and get_recent_closed_trades
+-- don't sequential-scan rl_tuples on the JSONB ->> operator
+CREATE INDEX IF NOT EXISTS idx_rl_tuples_correlation_id
+    ON rl_tuples ((action->>'correlation_id'));
