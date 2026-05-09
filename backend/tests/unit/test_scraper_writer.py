@@ -47,9 +47,15 @@ async def test_writer_publishes_only_above_min_relevance():
 
 
 async def test_writer_skips_duplicate_url_gracefully():
+    """Second write with same URL returns existing id — writer must not raise."""
     w = _make_writer()
-    # insert_news_item returns same id on conflict — should not raise
-    w._pg.insert_news_item = AsyncMock(return_value=5)
     scores = [ScoredArticle(symbol="BTCUSDT", relevance=0.9, sentiment=0.5, summary="ok")]
-    await w.write("coindesk", "https://example.com/dup", "t", "b", scores)
-    w._pg.insert_news_item.assert_called_once()
+    url = "https://example.com/dup"
+    # Both calls return the same id (ON CONFLICT DO UPDATE RETURNING id)
+    w._pg.insert_news_item = AsyncMock(return_value=5)
+    await w.write("coindesk", url, "t", "b", scores)
+    await w.write("coindesk", url, "t updated", "b updated", scores)
+    # insert_news_item called twice; idempotent upsert handles duplicate silently
+    assert w._pg.insert_news_item.call_count == 2
+    # Sentiments written twice (once per write call)
+    assert w._pg.insert_news_sentiment.call_count == 2

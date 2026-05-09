@@ -33,7 +33,10 @@ class ScraperRunner:
             symbols=settings.symbol_list,
         )
         self._writer = NewsWriter(
-            pg=pg, bus=bus, min_relevance=settings.scraper_min_relevance
+            pg=pg,
+            bus=bus,
+            min_relevance=settings.scraper_min_relevance,
+            model=settings.scraper_ollama_model,
         )
 
     async def run(self) -> None:
@@ -46,6 +49,9 @@ class ScraperRunner:
         logger.info("ScraperRunner: starting scrape cycle (%d sources)", len(SOURCES))
         tasks = [self._scrape_source(src) for src in SOURCES]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        for src, result in zip(SOURCES, results):
+            if isinstance(result, Exception):
+                logger.warning("ScraperRunner: source=%s error=%s", src.name, result)
         errors = sum(1 for r in results if isinstance(r, Exception))
         logger.info(
             "ScraperRunner: cycle complete — %d sources, %d errors",
@@ -53,22 +59,19 @@ class ScraperRunner:
         )
 
     async def _scrape_source(self, source) -> None:
-        try:
-            articles = await self._fetch_articles(source)
-            for article in articles:
-                scores = await self._scorer.score(
-                    title=article.get("title", ""),
-                    body=article.get("body", ""),
-                )
-                await self._writer.write(
-                    source=source.name,
-                    url=article.get("url", f"unknown-{source.name}"),
-                    title=article.get("title"),
-                    body=article.get("body"),
-                    scores=scores,
-                )
-        except Exception as exc:
-            logger.warning("ScraperRunner: source=%s error=%s", source.name, exc)
+        articles = await self._fetch_articles(source)
+        for article in articles:
+            scores = await self._scorer.score(
+                title=article.get("title", ""),
+                body=article.get("body", ""),
+            )
+            await self._writer.write(
+                source=source.name,
+                url=article.get("url", f"unknown-{source.name}"),
+                title=article.get("title"),
+                body=article.get("body"),
+                scores=scores,
+            )
 
     async def _fetch_articles(self, source) -> list[dict]:
         """Use ScrapeGraphAI for article sources; raw JSON fetch for Reddit."""

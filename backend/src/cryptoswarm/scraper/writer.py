@@ -20,10 +20,12 @@ class NewsWriter:
         pg: "PostgresWriter",
         bus: "BusClient",
         min_relevance: float = 0.3,
+        model: str = "qwen2.5:7b",
     ) -> None:
         self._pg = pg
         self._bus = bus
         self._min_relevance = min_relevance
+        self._model = model
 
     async def write(
         self,
@@ -42,7 +44,7 @@ class NewsWriter:
             await self._pg.insert_news_sentiment(
                 news_item_id=news_id,
                 symbol=scored.symbol,
-                model="qwen2.5:7b",
+                model=self._model,
                 relevance=scored.relevance,
                 score=scored.sentiment,
                 summary=scored.summary,
