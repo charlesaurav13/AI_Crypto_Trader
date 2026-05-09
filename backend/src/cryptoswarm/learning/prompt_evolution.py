@@ -167,7 +167,7 @@ class PromptEvolutionEngine:
                 if action.get("agent", "director") == agent_name:
                     relevant.append(t)
             except Exception:
-                relevant.append(t)
+                continue  # drop unparseable — do not attribute to any agent
         relevant.sort(key=lambda x: float(x["reward"]) if x.get("reward") else 0.0)
         return relevant[:n]
 
