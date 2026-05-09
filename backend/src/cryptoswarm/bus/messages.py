@@ -136,7 +136,7 @@ class RiskResult(BaseMsg):
 class SentimentResult(BaseMsg):
     symbol: str
     score: float                    # -1.0 (extreme fear) to 1.0 (extreme greed)
-    source: str                     # "fear_greed_api" | "neutral_fallback"
+    source: str                     # "fear_greed_api" | "neutral_fallback" | "combined"
     summary: str
 
 

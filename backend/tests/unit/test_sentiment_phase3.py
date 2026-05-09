@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from cryptoswarm.agents.sentiment import SentimentAgent
-from cryptoswarm.bus.messages import AnalyzeRequest, NewsSentimentResult
+from cryptoswarm.bus.messages import AnalyzeRequest
 
 
 def _make_agent(recent_news: list[dict] | None = None):
