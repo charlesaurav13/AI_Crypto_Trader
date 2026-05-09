@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import ta
 import numpy as np
 import pandas as pd
 
@@ -53,7 +54,6 @@ class FeatureEngine:
             return np.zeros((lookback, FEATURE_SIZE), dtype=np.float32)
 
     def _compute(self, rows: list[dict], news_score: float, news_count: int) -> np.ndarray:
-        import ta
         df = pd.DataFrame(rows)
         close = df["close"].astype(float)
         high  = df["high"].astype(float)
@@ -131,7 +131,7 @@ class FeatureEngine:
             min(high_low_ratio * 50, 1.0),
             min(vol_acceleration - 1.0, 2.0) / 2.0,
             # Padding to reach FEATURE_SIZE=25
-            0.0, 0.0,
+            0.0, 0.0, 0.0,
         ], dtype=np.float32)
 
         assert len(features) == FEATURE_SIZE

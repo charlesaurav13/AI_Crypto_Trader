@@ -40,12 +40,18 @@ async def test_build_returns_correct_shape():
     assert isinstance(vec, np.ndarray)
     assert vec.shape == (FEATURE_SIZE,)
     assert not np.any(np.isnan(vec))
+    # _compute must have run — at least some features should be non-zero
+    assert np.any(vec != 0.0), "_compute silently returned zeros (likely assertion error swallowed)"
+    engine._ts.fetch_klines.assert_called_once_with("BTCUSDT", limit=200)
 
 
 async def test_build_sequence_returns_3d_array():
     engine = _make_engine()
+    engine._ts.fetch_klines = AsyncMock(return_value=_fake_klines(230))
     seq = await engine.build_sequence("BTCUSDT", lookback=30)
     assert seq.shape == (30, FEATURE_SIZE)
+    assert np.any(seq != 0.0), "_compute silently returned zeros in sequence"
+    engine._ts.fetch_klines.assert_called_once_with("BTCUSDT", limit=230)
 
 
 async def test_build_returns_neutral_on_insufficient_data():
