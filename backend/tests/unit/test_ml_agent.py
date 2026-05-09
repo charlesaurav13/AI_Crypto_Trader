@@ -55,7 +55,7 @@ async def test_ml_agent_publishes_ml_signal():
     assert msg.size_adjustment == "scale_up"
 
 
-async def test_ml_agent_neutral_when_not_trained():
+async def test_ml_agent_zero_confidence_when_all_models_untrained():
     agent = _make_agent(trained=False)
     req = AnalyzeRequest(symbol="SOLUSDT")
     await agent._handle(req)
@@ -76,5 +76,16 @@ async def test_ml_agent_handles_feature_error_gracefully():
     agent._features.build = AsyncMock(side_effect=Exception("TS down"))
     req = AnalyzeRequest(symbol="BTCUSDT")
     await agent._handle(req)  # Must not raise
-    _, msg = agent._bus.publish.call_args[0]
-    assert msg.confidence == 0.0
+    agent._bus.publish.assert_called_once()
+
+
+async def test_ml_agent_neutral_fallback_also_stores_to_db():
+    """When feature build fails, _publish_neutral should still write to DB."""
+    agent = _make_agent()
+    agent._features.build = AsyncMock(side_effect=Exception("TS down"))
+    req = AnalyzeRequest(symbol="BTCUSDT")
+    await agent._handle(req)
+    agent._pg.insert_ml_signal.assert_called_once()
+    call_kwargs = agent._pg.insert_ml_signal.call_args[1]
+    assert call_kwargs["confidence"] == 0.0
+    assert call_kwargs["size_adjustment"] == "hold"

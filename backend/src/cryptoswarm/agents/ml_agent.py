@@ -53,12 +53,17 @@ class MLAgent:
             await self._publish_neutral(req)
             return
 
-        regime, direction, xgb_conf = self._xgb.predict(feat_vec)
-        short_dir, lstm_conf = self._lstm.predict(feat_seq)
-        size_adj, ppo_conf = self._ppo.predict(feat_vec)
+        try:
+            regime, direction, xgb_conf = self._xgb.predict(feat_vec)
+            short_dir, lstm_conf = self._lstm.predict(feat_seq)
+            size_adj, ppo_conf = self._ppo.predict(feat_vec)
+        except Exception as exc:
+            logger.warning("MLAgent: model inference failed for %s: %s", req.symbol, exc)
+            await self._publish_neutral(req)
+            return
 
         # Overall confidence: average of models that have been trained (conf > 0)
-        confidences = [c for c in [xgb_conf, lstm_conf] if c > 0.0]
+        confidences = [c for c in [xgb_conf, lstm_conf, ppo_conf] if c > 0.0]
         confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
 
         reasoning = (
@@ -106,3 +111,15 @@ class MLAgent:
             reasoning="feature build failed — neutral fallback",
         )
         await self._bus.publish(f"agent.result.ml.{req.symbol}", msg)
+        try:
+            await self._pg.insert_ml_signal(
+                symbol=req.symbol,
+                regime_pred="ranging",
+                direction_pred="up",
+                short_direction="up",
+                confidence=0.0,
+                size_adjustment="hold",
+                model_version="neutral_fallback",
+            )
+        except Exception as exc:
+            logger.warning("MLAgent: failed to persist neutral signal for %s: %s", req.symbol, exc)
