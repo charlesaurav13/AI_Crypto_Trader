@@ -18,3 +18,5 @@ infra/data/
 
 # macOS
 .DS_Store
+docs/
+
